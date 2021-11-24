@@ -1,0 +1,128 @@
+---
+title: "Coffee ratings"
+author: "Tamas Nagy"
+date: "11/24/2021"
+output: html_document
+---
+
+# Analysis of coffee ratings
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggridges)
+library(performance)
+library(correlation)
+
+theme_set(theme_light())
+
+```
+
+# Reading processing data
+```{r}
+coffee_raw <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-07-07/coffee_ratings.csv')
+
+coffee <-
+    coffee_raw %>% 
+    rename(rating = total_cup_points,
+           country = country_of_origin) %>% 
+    filter(rating != 0, !is.na(country)) %>% 
+    mutate(country = fct_lump(country, n = 15),
+           year = parse_number(harvest_year) %>% 
+                  if_else(.<1980, NA_real_, .)
+               )
+
+```
+
+# Exploring data
+```{r}
+glimpse(coffee)
+
+distinct(coffee_raw, species)
+count(coffee_raw, species)
+
+coffee %>% 
+    count(country, sort = TRUE) %>% 
+    print(n = 100)
+
+coffee %>% 
+    distinct(harvest_year)
+
+summary(coffee$year)
+
+```
+
+## Create histograms of rating
+
+```{r}
+coffee %>% 
+    ggplot() +
+    aes(x = rating) +
+    geom_histogram()
+
+coffee %>% 
+    ggplot() +
+    aes(x = rating, fill = country) +
+    geom_histogram(show.legend = FALSE,
+                   alpha = .4, 
+                   position = "identity")
+
+```
+
+## Ridgeline plots
+
+```{r}
+
+coffee %>% 
+    mutate(country = fct_reorder(country, rating)) %>% 
+    ggplot() +
+    aes(y = country, x = rating, fill = country) +
+    geom_density_ridges(show.legend = FALSE) +
+    scale_fill_viridis_d(option = "magma") +
+    labs(y = NULL,
+         x = "Rating",
+         title = "Distribution of coffee ratings by country")
+    
+```
+
+```{r}
+
+coffee %>% 
+    ggplot() +
+    aes(x = year, y = rating) +
+    geom_violin(aes(group = year), 
+                fill = "brown",
+                alpha = .8) +
+    geom_point(alpha = .1) +
+    geom_smooth() +
+    labs(y = "Rating", 
+         x = NULL,
+         title = "Coffee ratings by year",
+         subtitle = "Ratings in overall changed in a non-linear way over the years")
+
+```
+
+
+# Modeling
+
+```{r}
+rating_lm <-
+    lm(rating ~ species + aroma + flavor + acidity + body + balance + clean_cup + sweetness,
+   data = coffee)
+
+summary(rating_lm)
+
+check_model(rating_lm)
+
+```
+
+```{r}
+
+coffee %>% 
+    select(rating, aroma:sweetness) %>% 
+    correlation(p_adjust = "bonferroni") %>% 
+    summary() %>% 
+    print_html()
+
+```
+
